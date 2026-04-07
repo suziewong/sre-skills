@@ -1,0 +1,48 @@
+{
+  "name": "sre-skills",
+  "version": "1.0.0",
+  "name_zh": "SRE 技能库",
+  "description": "开源 SRE 技能库，沉淀故障诊断最佳实践",
+  "category": "sre",
+  "tags": ["sre", "devops", "observability", "diagnosis", "kubernetes", "mysql"],
+  "author": "suziewong",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/suziewong/sre-skills",
+  "skills": [
+    {
+      "name": "mysql-slow-query",
+      "name_zh": "MySQL 慢查询诊断",
+      "severity": "high",
+      "icon": "🐬",
+      "status": "ready"
+    },
+    {
+      "name": "k8s-pod-crash",
+      "name_zh": "K8s Pod 异常排查",
+      "severity": "high",
+      "icon": "☸️",
+      "status": "planned"
+    },
+    {
+      "name": "network-timeout",
+      "name_zh": "网络超时定位",
+      "severity": "high",
+      "icon": "🌐",
+      "status": "planned"
+    },
+    {
+      "name": "memory-leak",
+      "name_zh": "内存泄漏分析",
+      "severity": "high",
+      "icon": "💾",
+      "status": "planned"
+    },
+    {
+      "name": "oom-analysis",
+      "name_zh": "OOM 问题诊断",
+      "severity": "critical",
+      "icon": "💀",
+      "status": "planned"
+    }
+  ]
+}
