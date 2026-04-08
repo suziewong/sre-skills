@@ -1,0 +1,207 @@
+# 案例: Spring Boot 应用滚动更新失败
+
+## 背景
+
+- **环境**: 生产 Kubernetes 集群
+- **服务**: 用户认证服务 (Spring Boot + Redis)
+- **规模**: 10 Pods，QPS ~2000
+
+## 现象
+
+滚动更新时，新 Pod 一直处于 `Ready: 0/1`，旧 Pod 不断被终止，导致服务中断。
+
+```bash
+$ kubectl rollout status deployment user-auth
+Waiting for deployment "user-auth" rollout to finish: 1 out of 10 new pods have been completed...
+
+$ kubectl get pods -l app=user-auth
+NAME                        READY   STATUS            RESTARTS   AGE
+user-auth-7d9f8b6c5-old     1/1     Running           0          10m
+user-auth-8e0g7h8i9-new     0/1     Running           0          3m   # 卡住
+...
+```
+
+## 诊断过程
+
+### Step 1: 检查新 Pod 详情
+
+```bash
+$ kubectl describe pod user-auth-8e0g7h8i9-new
+
+Name:         user-auth-8e0g7h8i9-new
+...
+Conditions:
+  Type              Status
+  Ready             False   # ← 关键！
+  ContainersReady   False
+  Initialized       True
+  PodScheduled      True
+
+Events:
+  Type     Reason                  Age                  From                     Message
+  ----     ------                  ----                 ----                     -------
+  Warning  Unhealthy               2m12s                kubelet                  Readiness probe failed: Get "http://:8080/actuator/health/readiness": dial tcp :8080: connect: connection refused
+```
+
+**发现**: Readiness probe 失败，连接被拒绝
+
+### Step 2: 检查应用启动时间
+
+```bash
+$ kubectl get pod user-auth-8e0g7h8i9-new -o jsonpath='{.status.startTime}{"\n"}{.status.conditions[?(@.type=="Ready")].lastTransitionTime}'
+2024-01-15T10:00:00Z
+2024-01-15T10:03:30Z  # 3分30秒后才 Ready
+```
+
+**发现**: 应用需要 3分30秒 才能启动完成
+
+### Step 3: 检查 Readiness Probe 配置
+
+```bash
+$ kubectl get deployment user-auth -o jsonpath='{.spec.template.spec.containers[0].readinessProbe}'
+
+{
+  "httpGet": {
+    "path": "/actuator/health/readiness",
+    "port": 8080
+  },
+  "initialDelaySeconds": 10,  # ← 太短！
+  "periodSeconds": 5,
+  "failureThreshold": 3
+}
+```
+
+**问题分析**:
+- `initialDelaySeconds = 10`
+- `failureThreshold = 3`
+- `periodSeconds = 5`
+- **失败窗口**: 10 + 3×5 = **25秒**
+- **实际启动时间**: **210秒**
+- **结论**: 25秒 < 210秒，probe 在启动期间就判定失败了
+
+### Step 4: 检查应用日志
+
+```bash
+$ kubectl logs user-auth-8e0g7h8i9-new --timestamps | head -50
+2024-01-15T10:00:05.123Z Starting Spring Boot...
+2024-01-15T10:00:15.123Z Connecting to Redis...
+2024-01-15T10:00:25.123Z Redis connection failed, retrying...
+...
+2024-01-15T10:02:45.123Z Redis connection successful
+2024-01-15T10:03:00.123Z Application started
+```
+
+**发现**: Redis 连接耗时 2分钟，导致启动慢
+
+## 根因分析
+
+1. **Readiness Probe initialDelaySeconds 太短**: 只有 10s，但应用需要 210s
+2. **Probe 检查了外部依赖 (Redis)**: readiness probe 依赖 Redis
+3. **failureThreshold 不够**: 只有 3 次机会就被判失败
+4. **缺少 Startup Probe**: 没有给够启动时间
+
+## 解决方案
+
+### 方案 1: 添加 Startup Probe (推荐)
+
+```yaml
+# 补丁更新
+kubectl patch deployment user-auth --type=json -p='[
+  {"op": "add", "path": "/spec/template/spec/containers/0/startupProbe", "value": {
+    "httpGet": {"path": "/actuator/health/readiness", "port": 8080},
+    "failureThreshold": 60,
+    "periodSeconds": 10
+  }}
+]'
+```
+
+解释:
+- `failureThreshold: 60`
+- `periodSeconds: 10`
+- **最大启动时间**: 60×10 = **600秒 = 10分钟**
+- 应用有足够的启动时间
+
+### 方案 2: 分离健康检查
+
+```java
+// Readiness: 只检查自身（应用已启动）
+// /actuator/health/readiness 只检查进程是否存活
+
+// Liveness: 检查核心功能（应用是否健康）
+// /actuator/health/liveness 检查 Redis 连接等
+
+// 不要在 readiness 中检查外部依赖
+```
+
+### 方案 3: 调整 initialDelaySeconds
+
+```yaml
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8080
+  initialDelaySeconds: 220  # 略大于实际启动时间
+  periodSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+```
+
+## 最终配置
+
+```yaml
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  
+  template:
+    spec:
+      terminationGracePeriodSeconds: 60
+      
+      containers:
+      - name: user-auth
+        image: registry.example.com/user-auth:v2.0.0
+        
+        startupProbe:          # ← 新增
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          failureThreshold: 60  # 10分钟启动时间
+          periodSeconds: 10
+        
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 0  # startup 接管后这里不起作用
+          periodSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          failureThreshold: 3
+          successThreshold: 1
+```
+
+## 结果
+
+| 指标 | 修复前 | 修复后 |
+|------|--------|--------|
+| 滚动更新时间 | 失败/超时 | 3分钟完成 |
+| 服务中断 | 30秒 | 0秒 |
+| 新 Pod Ready 时间 | 超时被 kill | 正常就绪 |
+
+## 教训总结
+
+1. **Startup Probe 是慢启动应用的救星**
+2. **initialDelaySeconds 必须 ≥ 实际启动时间**
+3. **Readiness 不要检查外部依赖**，否则网络波动会导致误判
+4. **failureThreshold 要考虑应用启动时间和探测间隔**
+5. **滚动更新前先测试新版本健康检查**

@@ -1,0 +1,151 @@
+# 案例: Nginx Worker 内存泄漏导致系统 OOM
+
+## 背景
+
+- **环境**: 阿里云 ECS 4核8G
+- **服务**: Nginx 反向代理 + 静态资源
+- **流量**: 日均 PV 500万
+
+## 现象
+
+```bash
+$ dmesg | tail -20
+[1234567.890] Out of memory: Killed process 12345 (nginx) total-vm:524288kB, anon-rss:4096kB
+[1234567.891] Out of memory: Killed process 12346 (nginx) total-vm:524288kB, anon-rss:4096kB
+[1234567.892] Out of memory: Killed process 12347 (nginx) total-vm:524288kB, anon-rss:4096kB
+```
+
+## 诊断过程
+
+### Step 1: 系统内存状态
+
+```bash
+$ free -h
+              total        used        free      shared  buff/cache   available
+Mem:          7.7Gi       7.5Gi       123Mi        50Mi       200Mi       100Mi
+Swap:         2.0Gi       1.9Gi       100Mi
+```
+
+**发现**: 内存几乎耗尽，只有 100Mi 可用
+
+### Step 2: 找出内存大户
+
+```bash
+$ ps aux --sort=-rss | head -15
+USER       PID %CPU %MEM    VSZ   RSS COMMAND
+nginx      123  0.0  3.2 524288 24576 nginx: worker
+nginx      124  0.0  3.2 524288 24576 nginx: worker
+nginx      125  0.0  3.2 524288 24576 nginx: worker
+nginx      126  0.0  3.2 524288 245768 nginx: worker  # 异常！
+...
+```
+
+**发现**: 一个 worker 进程 RSS 达到 245MB（正常应该 ~25MB）
+
+### Step 3: 分析进程内存
+
+```bash
+$ cat /proc/126/smaps | grep -E "^(Size|Rss|Pss):" | awk '{sum += $2} END {print "Total: " sum/1024 " MB"}'
+Total: 245.7 MB
+
+$ cat /proc/126/maps | head -20
+...
+7f0a00000000-7f0a0800000 rw-s anonymous
+7f0a0800000-7f0a1000000 rw-s anonymous
+...
+```
+
+**发现**: 大量匿名内存映射，疑似内存泄漏
+
+### Step 4: Nginx 配置检查
+
+```bash
+$ nginx -V
+nginx version: nginx/1.24.0
+...
+$ cat /etc/nginx/nginx.conf
+...
+http {
+    proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=STATIC:10m max_size=10g inactive=60m;
+    
+    server {
+        location / {
+            proxy_cache STATIC;
+            proxy_pass http://backend;
+        }
+    }
+}
+```
+
+**发现**: proxy_cache 设置了 10GB max_size 但 inactive 只有 60m
+
+## 根因分析
+
+1. **Nginx proxy_cache 未正确清理**: inactive 时间太短，但缓存文件未删除
+2. **内存映射泄漏**: cache 文件使用 mmap，频繁创建删除导致内存碎片
+3. **缺少监控**: 未监控 nginx worker 进程内存
+
+## 解决方案
+
+### 临时方案 (5分钟)
+
+```bash
+# 1. 重启 Nginx
+nginx -s reload  # 先尝试优雅重载
+# 如果不行
+systemctl restart nginx
+
+# 2. 清理缓存
+rm -rf /var/cache/nginx/*
+
+# 3. 清理内存缓存
+echo 3 > /proc/sys/vm/drop_caches
+```
+
+### 长期方案
+
+```nginx
+# /etc/nginx/nginx.conf
+http {
+    # 限制缓存总大小
+    proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=STATIC:100m 
+                     max_size=1g inactive=7d use_temp_path=off;
+    
+    # 限制单个文件大小
+    proxy_cache_max_range_offset 10m;
+    
+    # 定期检查缓存有效性
+    proxy_cache_valid 200 302 10m;
+    proxy_cache_valid 301 1h;
+    proxy_cache_valid any 5m;
+}
+```
+
+### 添加监控
+
+```yaml
+# Prometheus 告警规则
+- alert: NginxWorkerMemoryHigh
+  expr: (nginx_process_resident_memory_bytes / nginx_process_virtual_memory_bytes) > 0.8
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "Nginx worker memory usage exceeds 80% of virtual memory"
+```
+
+## 结果
+
+| 指标 | 修复前 | 修复后 |
+|------|--------|--------|
+| 系统内存使用 | 98% | 45% |
+| Nginx Worker RSS | 245MB (max) | 25MB (avg) |
+| OOM 事件 | 10+ 次/天 | 0 次/天 |
+| 缓存命中率 | 60% | 85% |
+
+## 教训总结
+
+1. **Nginx 缓存配置要设置合理的 max_size**
+2. **添加进程内存监控**，每个 worker 单独监控
+3. **定期检查 dmesg**，及时发现 OOM 事件
+4. **inactive 时间要和业务匹配**，避免缓存膨胀
