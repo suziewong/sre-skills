@@ -21,7 +21,7 @@
       "name_zh": "K8s Pod 异常排查",
       "severity": "high",
       "icon": "☸️",
-      "status": "planned"
+      "status": "ready"
     },
     {
       "name": "network-timeout",
@@ -42,7 +42,14 @@
       "name_zh": "OOM 问题诊断",
       "severity": "critical",
       "icon": "💀",
-      "status": "planned"
+      "status": "ready"
+    },
+    {
+      "name": "health-check",
+      "name_zh": "健康检查配置",
+      "severity": "medium",
+      "icon": "❤️‍🩹",
+      "status": "ready"
     }
   ]
 }
