@@ -1,10 +1,10 @@
 {
   "name": "sre-skills",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name_zh": "SRE 技能库",
   "description": "开源 SRE 技能库，沉淀故障诊断最佳实践",
   "category": "sre",
-  "tags": ["sre", "devops", "observability", "diagnosis", "kubernetes", "mysql", "ai", "incident", "slo", "cost"],
+  "tags": ["sre", "devops", "observability", "diagnosis", "kubernetes", "mysql", "ai", "incident", "slo", "cost", "architecture"],
   "author": "suziewong",
   "license": "Apache-2.0",
   "homepage": "https://github.com/suziewong/sre-skills",
@@ -64,7 +64,7 @@
       "name_zh": "SLO 计算器",
       "severity": "medium",
       "icon": "📊",
-      "status": "planned",
+      "status": "ready",
       "is_new": true
     },
     {
@@ -72,7 +72,15 @@
       "name_zh": "成本异常检测",
       "severity": "medium",
       "icon": "💰",
-      "status": "planned",
+      "status": "ready",
+      "is_new": true
+    },
+    {
+      "name": "architecture-review",
+      "name_zh": "架构预审助手",
+      "severity": "high",
+      "icon": "🏛️",
+      "status": "ready",
       "is_new": true
     }
   ]
