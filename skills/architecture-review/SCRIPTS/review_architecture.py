@@ -411,7 +411,7 @@ def review_architecture(
     )
 
     print("[*] AI 架构评审中...", file=sys.stderr)
-    response = call_ollama(prompt, provider, model)
+    response = call_ollama(prompt, model)
 
     if not response:
         return {"error": "AI 调用失败，请检查 Ollama 是否运行"}
