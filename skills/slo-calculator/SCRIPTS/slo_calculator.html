@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLO Calculator - SLO/SLI 计算器</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f23;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 30px;
+            color: #fff;
+        }
+        h1 span { margin-right: 10px; }
+        .card {
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid #2a2a4e;
+        }
+        .card-title {
+            font-size: 1rem;
+            color: #888;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        @media (max-width: 600px) {
+            .form-grid { grid-template-columns: 1fr; }
+        }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-bottom: 6px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            background: #0f0f23;
+            border: 1px solid #2a2a4e;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+        }
+        .btn:active { transform: translateY(0); }
+
+        /* Result */
+        .result { display: none; }
+        .result.show { display: block; }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .result-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        .status-badge {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .status-healthy { background: #065f46; color: #34d399; }
+        .status-warning { background: #854d0e; color: #fbbf24; }
+        .status-critical { background: #991b1b; color: #f87171; }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 600px) {
+            .metrics-grid { grid-template-columns: 1fr; }
+        }
+        .metric-card {
+            background: #0f0f23;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .metric-value.good { color: #34d399; }
+        .metric-value.bad { color: #f87171; }
+        .metric-value.neutral { color: #fbbf24; }
+        .metric-label {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .budget-bar {
+            background: #0f0f23;
+            border-radius: 8px;
+            height: 24px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        .budget-fill {
+            height: 100%;
+            transition: width 0.5s ease, background 0.3s;
+            border-radius: 8px;
+        }
+        .budget-fill.healthy { background: linear-gradient(90deg, #10b981, #34d399); }
+        .budget-fill.warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .budget-fill.critical { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+        .budget-legend {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        .detail-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .detail-table th, .detail-table td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #2a2a4e;
+        }
+        .detail-table th {
+            color: #888;
+            font-weight: 500;
+            font-size: 0.85rem;
+        }
+        .detail-table td { color: #fff; }
+        .detail-table tr:last-child td { border-bottom: none; }
+
+        .reference-section {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #2a2a4e;
+        }
+        .reference-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+        @media (max-width: 600px) {
+            .reference-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .reference-item {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 0.8rem;
+        }
+        .reference-item .slo { color: #fff; font-weight: 600; }
+        .reference-item .desc { color: #888; margin-top: 2px; }
+
+        .copy-btn {
+            padding: 6px 12px;
+            background: #2a2a4e;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .copy-btn:hover { background: #3a3a5e; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1><span>📊</span> SLO Calculator</h1>
+
+    <div class="card">
+        <div class="card-title">输入参数</div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>服务名称</label>
+                <input type="text" id="serviceName" value="order-service" placeholder="例如: order-service">
+            </div>
+            <div class="form-group">
+                <label>时间窗口（天）</label>
+                <input type="number" id="windowDays" value="30" min="1" max="365">
+            </div>
+            <div class="form-group">
+                <label>总请求量</label>
+                <input type="number" id="totalRequests" value="13140000" min="0" placeholder="例如: 1000000">
+            </div>
+            <div class="form-group">
+                <label>错误请求数</label>
+                <input type="number" id="errorCount" value="394" min="0" placeholder="例如: 100">
+            </div>
+            <div class="form-group">
+                <label>目标 SLO (%)</label>
+                <input type="number" id="targetSlo" value="99.9" step="0.1" min="0" max="100">
+            </div>
+        </div>
+        <button class="btn" onclick="calculate()">计算 SLO</button>
+    </div>
+
+    <div class="card result" id="resultCard">
+        <div class="result-header">
+            <div class="result-title" id="resultTitle">order-service 计算结果</div>
+            <div>
+                <span class="status-badge status-healthy" id="statusBadge">🟢 健康</span>
+                <button class="copy-btn" onclick="copyReport()">复制报告</button>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value" id="availValue">99.97%</div>
+                <div class="metric-label">实际可用性</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="budgetValue">78.3%</div>
+                <div class="metric-label">剩余预算</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="exhaustValue">47天</div>
+                <div class="metric-label">预计耗尽</div>
+            </div>
+        </div>
+
+        <div class="budget-legend">
+            <span>0% 已消耗</span>
+            <span id="consumedLabel">21.7% 已消耗</span>
+            <span>100%</span>
+        </div>
+        <div class="budget-bar">
+            <div class="budget-fill healthy" id="budgetFill" style="width: 21.7%"></div>
+        </div>
+
+        <table class="detail-table">
+            <tr>
+                <th>指标</th>
+                <th>值</th>
+                <th>说明</th>
+            </tr>
+            <tr>
+                <td>总请求量</td>
+                <td id="dtRequests">13,140,000</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>错误次数</td>
+                <td id="dtErrors">394</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>实际错误率</td>
+                <td id="dtErrorRate">0.03%</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>目标可用性</td>
+                <td id="dtTarget">99.9%</td>
+                <td id="dtTargetDesc">高可用性</td>
+            </tr>
+            <tr>
+                <td>总错误预算</td>
+                <td id="dtBudgetTotal">13,140</td>
+                <td>次</td>
+            </tr>
+        </table>
+
+        <div class="reference-section">
+            <div class="card-title">SLO 达标参考</div>
+            <div class="reference-grid">
+                <div class="reference-item"><div class="slo">99%</div><div class="desc">基础 · 7.3小时/月</div></div>
+                <div class="reference-item"><div class="slo">99.5%</div><div class="desc">标准 · 3.65小时/月</div></div>
+                <div class="reference-item"><div class="slo">99.9%</div><div class="desc">高可用 · 43.8分钟/月</div></div>
+                <div class="reference-item"><div class="slo">99.95%</div><div class="desc">金融级 · 21.9分钟/月</div></div>
+                <div class="reference-item"><div class="slo">99.99%</div><div class="desc">极高可用 · 4.4分钟/月</div></div>
+                <div class="reference-item"><div class="slo">99.999%</div><div class="desc">超高可用 · 26秒/月</div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const SLO_REF = {
+    99: ['基础', '7.3 小时/月'],
+    99.5: ['标准', '3.65 小时/月'],
+    99.9: ['高可用', '43.8 分钟/月'],
+    99.95: ['金融级', '21.9 分钟/月'],
+    99.99: ['极高可用', '4.4 分钟/月'],
+    99.999: ['超高可用', '26 秒/月'],
+};
+
+function getSloDesc(target) {
+    const keys = Object.keys(SLO_REF).map(Number).sort((a, b) => a - b);
+    for (let i = keys.length - 1; i >= 0; i--) {
+        if (target >= keys[i]) return SLO_REF[keys[i]];
+    }
+    return ['自定义', '按目标计算'];
+}
+
+function calculate() {
+    const service = document.getElementById('serviceName').value || 'unknown';
+    const window = parseInt(document.getElementById('windowDays').value) || 30;
+    const requests = parseInt(document.getElementById('totalRequests').value) || 0;
+    const errors = parseInt(document.getElementById('errorCount').value) || 0;
+    const target = parseFloat(document.getElementById('targetSlo').value) || 99.9;
+
+    if (requests === 0) {
+        alert('请输入总请求量');
+        return;
+    }
+
+    // Calculate
+    const availability = ((requests - errors) / requests) * 100;
+    const errorRate = (errors / requests) * 100;
+    const budgetTotal = requests * (1 - target / 100);
+    const budgetRemaining = Math.max(0, budgetTotal - errors);
+    const budgetConsumedPct = Math.min(100, Math.max(0, errors / budgetTotal * 100));
+    const budgetRemainingPct = 100 - budgetConsumedPct;
+
+    let status = budgetRemainingPct > 50 ? 'healthy' : budgetRemainingPct > 20 ? 'warning' : 'critical';
+
+    // Estimate exhaustion
+    let exhaustionText = 'N/A';
+    if (budgetConsumedPct > 0 && budgetConsumedPct < 100) {
+        const daysElapsed = window * (budgetConsumedPct / 100);
+        if (daysElapsed > 0) {
+            const dailyConsumption = budgetConsumedPct / daysElapsed;
+            const remainingDays = (100 - budgetConsumedPct) / dailyConsumption * (window / 30);
+            const exhaustionDate = new Date(Date.now() + remainingDays * 24 * 60 * 60 * 1000);
+            exhaustionText = Math.round(remainingDays) + '天';
+        }
+    } else if (budgetConsumedPct >= 100) {
+        exhaustionText = '已耗尽';
+    }
+
+    // Update UI
+    document.getElementById('resultTitle').textContent = service + ' 计算结果';
+
+    const badge = document.getElementById('statusBadge');
+    badge.className = 'status-badge status-' + status;
+    badge.textContent = status === 'healthy' ? '🟢 健康' : status === 'warning' ? '🟡 注意' : '🔴 严重';
+
+    document.getElementById('availValue').textContent = availability.toFixed(4) + '%';
+    document.getElementById('availValue').className = 'metric-value ' + (availability >= target ? 'good' : 'bad');
+
+    document.getElementById('budgetValue').textContent = budgetRemainingPct.toFixed(1) + '%';
+    document.getElementById('budgetValue').className = 'metric-value ' + (budgetRemainingPct > 50 ? 'good' : budgetRemainingPct > 20 ? 'neutral' : 'bad');
+
+    document.getElementById('exhaustValue').textContent = exhaustionText;
+
+    document.getElementById('consumedLabel').textContent = budgetConsumedPct.toFixed(1) + '% 已消耗';
+
+    const fill = document.getElementById('budgetFill');
+    fill.style.width = budgetConsumedPct + '%';
+    fill.className = 'budget-fill ' + status;
+
+    document.getElementById('dtRequests').textContent = requests.toLocaleString();
+    document.getElementById('dtErrors').textContent = errors.toLocaleString();
+    document.getElementById('dtErrorRate').textContent = errorRate.toFixed(4) + '%';
+    document.getElementById('dtTarget').textContent = target + '%';
+    const desc = getSloDesc(target);
+    document.getElementById('dtTargetDesc').textContent = desc[0];
+    document.getElementById('dtBudgetTotal').textContent = Math.round(budgetTotal).toLocaleString();
+
+    document.getElementById('resultCard').classList.add('show');
+}
+
+function copyReport() {
+    const service = document.getElementById('serviceName').value || 'unknown';
+    const window = parseInt(document.getElementById('windowDays').value) || 30;
+    const requests = parseInt(document.getElementById('totalRequests').value) || 0;
+    const errors = parseInt(document.getElementById('errorCount').value) || 0;
+    const target = parseFloat(document.getElementById('targetSlo').value) || 99.9;
+
+    const availability = ((requests - errors) / requests) * 100;
+    const budgetTotal = requests * (1 - target / 100);
+    const budgetRemaining = Math.max(0, budgetTotal - errors);
+    const budgetConsumedPct = Math.min(100, Math.max(0, errors / budgetTotal * 100));
+
+    const report = `## SLO 计算结果 - ${service}
+
+| 指标 | 值 |
+|------|-----|
+| 时间窗口 | ${window}天 |
+| 总请求量 | ${requests.toLocaleString()} |
+| 错误次数 | ${errors.toLocaleString()} |
+| 实际可用性 | ${availability.toFixed(4)}% |
+| 目标可用性 | ${target}% |
+| 剩余错误预算 | ${(100 - budgetConsumedPct).toFixed(1)}% |
+| 已消耗 | ${budgetConsumedPct.toFixed(1)}% |`;
+
+    navigator.clipboard.writeText(report).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = '已复制!';
+        setTimeout(() => btn.textContent = '复制报告', 2000);
+    });
+}
+
+// Auto calculate on load
+window.onload = calculate;
+</script>
+</body>
+</html>
