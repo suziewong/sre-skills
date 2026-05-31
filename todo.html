@@ -251,11 +251,23 @@ footer {
 
 <script>
 const STORAGE_KEY = 'sre-skills-todos-v2';
+const SEED_TODOS = [
+  { id: 1, text: '[SRE Skills] 与大老板 Felix 对齐监控平台自动分析的交付标准', done: false },
+  { id: 2, text: '[SRE Skills] 梳理京东内部监控平台 API（Prometheus/Grafana/内部监控）', done: false },
+  { id: 3, text: '[SRE Skills] 搭建监控 API 集成的最小可用原型', done: false },
+  { id: 4, text: '[SRE Skills] 双11前完成开源发布，GitHub Stars 破圈', done: false },
+];
 
 function getTodos() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-  } catch { return []; }
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const stored = JSON.parse(raw || '[]');
+    if (!raw || stored.length === 0) {
+      saveTodos(SEED_TODOS);
+      return SEED_TODOS;
+    }
+    return stored;
+  } catch { return SEED_TODOS; }
 }
 
 function saveTodos(todos) {
